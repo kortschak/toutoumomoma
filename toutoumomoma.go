@@ -45,7 +45,10 @@ func Stripped(path string) (sneaky bool, err error) {
 			case ".gosymtab", ".gopclntab", ".go.buildinfo":
 				sym, err := exe.Symbols()
 				if err != nil {
-					return true, nil
+					if err == elf.ErrNoSymbols {
+						return true, nil
+					}
+					return true, err
 				}
 				for _, s := range sym {
 					if s.Name == "go.buildid" {
@@ -95,9 +98,29 @@ func Stripped(path string) (sneaky bool, err error) {
 	}
 }
 
-// ImportHash returns the import hash of a PE executable and the list of imports
-// in the executable used to generate the hash. ImportHash returns a non-nil error
-// for non-Windows binaries.
+// ImportHash returns the import hash of an executable and the list of dynamic imports
+// in the executable examined to generate the hash. For Windows PE format, the hash
+// is calculated according to the algorithm described in the FireEye blog post
+// https://www.fireeye.com/blog/threat-research/2014/01/tracking-malware-import-hashing.html.
+// For Linux, a similar construction is used with each imported symbol represented
+// as library.symbol without trimming the extension from the library part, while
+// Darwin imports are the list of symbols without a library prefix.
+//
+// Darwin:
+//  ___error
+//  __exit
+//  _clock_gettime
+//
+// Linux:
+//  libc.so.6.free
+//  .agwrite
+//  libc.so.6.puts
+//
+// Windows:
+//  kernel32.writefile
+//  kernel32.writeconsolew
+//  kernel32.waitformultipleobjects
+//
 func ImportHash(path string) (hash []byte, imports []string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -112,10 +135,50 @@ func ImportHash(path string) (hash []byte, imports []string, err error) {
 	}
 	switch {
 	case bytes.Equal(magic[:], []byte("\x7FELF")):
-		return nil, nil, errors.New("imphash not supported for ELF")
+		// Algorithm based on the PE imphash algorithm below.
+		// This will likely not be useful for Go executables.
+
+		exe, err := elf.NewFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		imps, err := exe.ImportedSymbols()
+		if err != nil && err != elf.ErrNoSymbols {
+			return nil, nil, err
+		}
+		h := md5.New()
+		if len(imps) == 0 {
+			return h.Sum(nil), nil, nil
+		}
+		imports = make([]string, len(imps))
+		for i, imp := range imps {
+			imports[i] = strings.ToLower(imp.Library + "." + imp.Name)
+			if i != 0 {
+				_, _ = h.Write([]byte{','})
+			}
+			fmt.Fprint(h, imports[i])
+		}
+		return h.Sum(nil), imports, nil
 
 	case bytes.Equal(magic[:3], []byte("\xFE\xED\xFA")) || bytes.Equal(magic[1:], []byte("\xFA\xED\xFE")):
-		return nil, nil, errors.New("imphash not supported for Mach-O")
+		// Algorithm based on the PE imphash algorithm below.
+
+		exe, err := macho.NewFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		imports, err = exe.ImportedSymbols()
+		if err != nil {
+			return nil, nil, err
+		}
+		h := md5.New()
+		for i, imp := range imports {
+			if i != 0 {
+				_, _ = h.Write([]byte{','})
+			}
+			fmt.Fprint(h, strings.ToLower(imp))
+		}
+		return h.Sum(nil), imports, nil
 
 	case bytes.Equal(magic[:2], []byte("MZ")):
 		// Algorithm from https://www.fireeye.com/blog/threat-research/2014/01/tracking-malware-import-hashing.html
