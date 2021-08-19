@@ -10,72 +10,59 @@ import (
 	"testing"
 )
 
-var scanTests = []struct {
-	GOOS    string
-	builder string
-	want    bool
-}{
-	{
-		GOOS:    "linux",
-		builder: "go",
-		want:    false,
-	},
-	{
-		GOOS:    "linux",
-		builder: "garble",
-		want:    true,
-	},
-	{
-		GOOS:    "darwin",
-		builder: "go",
-		want:    false,
-	},
-	{
-		GOOS:    "darwin",
-		builder: "garble",
-		want:    true,
-	},
-	{
-		GOOS:    "windows",
-		builder: "go",
-		want:    false,
-	},
-	{
-		GOOS:    "windows",
-		builder: "garble",
-		want:    true,
-	},
-}
-
 func TestScan(t *testing.T) {
 	const (
 		pkg    = "./testdata"
 		target = "./testdata/executable"
 	)
 
-	for _, test := range scanTests {
-		err := build(test.GOOS, test.builder, pkg, target)
-		if err != nil {
-			t.Errorf("failed to build test for GOOS=%s %s build testdata: %v", test.GOOS, test.builder, err)
-			continue
-		}
-		got, err := Scan(target)
-		if err != nil {
-			t.Errorf("unexpected error scanning executable for GOOS=%s %s build testdata: %v",
-				test.GOOS, test.builder, err)
-			continue
-		}
-		if got != test.want {
-			t.Errorf("unexpected result scanning executable for GOOS=%s %s build testdata: got:%t want:%t",
-				test.GOOS, test.builder, got, test.want)
+	flagSets := map[string][][]string{
+		"go": nil,
+		"garble": [][]string{
+			nil,
+			{"-literals"},
+			{"-tiny"},
+			{"-literals", "-tiny"},
+		},
+	}
+
+	for _, goos := range []string{
+		"linux",
+		"darwin",
+		"windows",
+	} {
+		for _, builder := range []string{
+			"go",
+			"garble",
+		} {
+			want := builder == "garble"
+
+			for _, flags := range flagSets[builder] {
+				cmd, err := build(goos, builder, pkg, target, flags)
+				if err != nil {
+					t.Errorf("failed to build test for GOOS=%s %s: %v",
+						goos, cmd, err)
+					continue
+				}
+				got, err := Scan(target)
+				if err != nil {
+					t.Errorf("unexpected error scanning executable for GOOS=%s %s: %v",
+						goos, cmd, err)
+					continue
+				}
+				if got != want {
+					t.Errorf("unexpected result scanning executable for GOOS=%s %s: got:%t want:%t",
+						goos, cmd, got, want)
+				}
+			}
 		}
 	}
 	os.Remove(target)
 }
 
-func build(goos, builder, path, target string) error {
-	cmd := exec.Command(builder, "build", "-o", target, path)
+func build(goos, builder, path, target string, flags []string) (*exec.Cmd, error) {
+	cmd := exec.Command(builder, append(flags[:len(flags):len(flags)], "build", "-o", target, path)...)
 	cmd.Env = append([]string{"GOOS=" + goos}, os.Environ()...)
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return cmd, cmd.Run()
 }
