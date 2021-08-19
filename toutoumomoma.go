@@ -6,16 +6,21 @@ package toutoumomoma
 
 import (
 	"bytes"
+	"crypto/md5"
 	"debug/elf"
 	"debug/macho"
 	"debug/pe"
+	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path"
+	"strings"
 )
 
-// Scan examines the file at the given path and returns whether it is likely
-// to be a Go executable that has had its symbols stripped.
-func Scan(path string) (sneaky bool, err error) {
+// Stripped examines the file at the given path and returns whether it is
+// likely to be a Go executable that has had its symbols stripped.
+func Stripped(path string) (sneaky bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return false, err
@@ -88,4 +93,70 @@ func Scan(path string) (sneaky bool, err error) {
 	default:
 		return false, nil
 	}
+}
+
+// ImportHash returns the import hash of a PE executable and the list of imports
+// in the executable used to generate the hash. ImportHash returns a non-nil error
+// for non-Windows binaries.
+func ImportHash(path string) (hash []byte, imports []string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	var magic [4]byte
+	_, err = f.ReadAt(magic[:], 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch {
+	case bytes.Equal(magic[:], []byte("\x7FELF")):
+		return nil, nil, errors.New("imphash not supported for ELF")
+
+	case bytes.Equal(magic[:3], []byte("\xFE\xED\xFA")) || bytes.Equal(magic[1:], []byte("\xFA\xED\xFE")):
+		return nil, nil, errors.New("imphash not supported for Mach-O")
+
+	case bytes.Equal(magic[:2], []byte("MZ")):
+		// Algorithm from https://www.fireeye.com/blog/threat-research/2014/01/tracking-malware-import-hashing.html
+		//  - Resolving ordinals to function names when they appear (done by the debug/pe library)
+		//  - Converting both DLL names and function names to all lowercase
+		//  - Removing the file extensions from imported module names
+		//  - Building and storing the lowercased string in an ordered list
+		//  - Generating the MD5 hash of the ordered list
+
+		exe, err := pe.NewFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		imports, err = exe.ImportedSymbols()
+		if err != nil {
+			return nil, nil, err
+		}
+		h := md5.New()
+		for i, imp := range imports {
+			imports[i], err = canonicaliseImport(imp)
+			if err != nil {
+				return nil, nil, err
+			}
+			if i != 0 {
+				_, _ = h.Write([]byte{','})
+			}
+			fmt.Fprint(h, imports[i])
+		}
+		return h.Sum(nil), imports, nil
+
+	default:
+		return nil, nil, errors.New("unknown format")
+	}
+}
+
+func canonicaliseImport(imp string) (string, error) {
+	parts := strings.SplitN(strings.ToLower(imp), ":", 3)
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid import symbol: %q", imp)
+	}
+	lib := strings.TrimSuffix(parts[1], path.Ext(parts[1]))
+	fn := parts[0]
+	return lib + "." + fn, nil
 }
