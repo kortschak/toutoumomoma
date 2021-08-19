@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"debug/elf"
 	"debug/macho"
-	"errors"
+	"debug/pe"
 	"io"
 	"os"
 )
@@ -38,9 +38,14 @@ func Scan(path string) (sneaky bool, err error) {
 		for _, section := range exe.Sections {
 			switch section.Name {
 			case ".gosymtab", ".gopclntab", ".go.buildinfo":
-				_, err = exe.Symbols()
+				sym, err := exe.Symbols()
 				if err != nil {
 					return true, nil
+				}
+				for _, s := range sym {
+					if s.Name == "go.buildid" {
+						return false, nil
+					}
 				}
 			}
 		}
@@ -51,25 +56,34 @@ func Scan(path string) (sneaky bool, err error) {
 		if err != nil {
 			return false, err
 		}
-		var isGo bool
 		for _, section := range exe.Sections {
 			switch section.Name {
 			case "__gosymtab", "__gopclntab", "__go_buildinfo":
-				isGo = true
+				for _, sym := range exe.Symtab.Syms {
+					if sym.Name == "go.buildid" {
+						return false, nil
+					}
+				}
+				return true, nil
 			}
 		}
-		if !isGo {
-			return false, nil
+		return false, nil
+
+	case bytes.Equal(magic[:2], []byte("MZ")):
+		exe, err := pe.NewFile(f)
+		if err != nil {
+			return false, err
 		}
-		for _, sym := range exe.Symtab.Syms {
+		for _, sym := range exe.Symbols {
 			if sym.Name == "go.buildid" {
 				return false, nil
 			}
 		}
-		return true, nil
-
-	case bytes.Equal(magic[:2], []byte("MZ")):
-		return false, errors.New("not supported for windows")
+		rdata, err := exe.Section(".rdata").Data()
+		if err != nil {
+			return false, err
+		}
+		return bytes.Contains(rdata, []byte("runtime.g")), nil
 
 	default:
 		return false, nil

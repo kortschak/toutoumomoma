@@ -5,8 +5,6 @@
 package toutoumomoma
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"testing"
@@ -16,43 +14,36 @@ var scanTests = []struct {
 	GOOS    string
 	builder string
 	want    bool
-	wantErr error
 }{
 	{
 		GOOS:    "linux",
 		builder: "go",
 		want:    false,
-		wantErr: nil,
 	},
 	{
 		GOOS:    "linux",
 		builder: "garble",
 		want:    true,
-		wantErr: nil,
 	},
 	{
 		GOOS:    "darwin",
 		builder: "go",
 		want:    false,
-		wantErr: nil,
 	},
 	{
 		GOOS:    "darwin",
 		builder: "garble",
 		want:    true,
-		wantErr: nil,
 	},
 	{
 		GOOS:    "windows",
 		builder: "go",
 		want:    false,
-		wantErr: errors.New("not supported for windows"),
 	},
 	{
 		GOOS:    "windows",
 		builder: "garble",
 		want:    true,
-		wantErr: errors.New("not supported for windows"),
 	},
 }
 
@@ -69,12 +60,9 @@ func TestScan(t *testing.T) {
 			continue
 		}
 		got, err := Scan(target)
-		if !sameError(err, test.wantErr) {
-			t.Errorf("unexpected error scanning executable for GOOS=%s %s build testdata: got:%v want:%v",
-				test.GOOS, test.builder, err, test.wantErr)
-			continue
-		}
 		if err != nil {
+			t.Errorf("unexpected error scanning executable for GOOS=%s %s build testdata: %v",
+				test.GOOS, test.builder, err)
 			continue
 		}
 		if got != test.want {
@@ -83,13 +71,6 @@ func TestScan(t *testing.T) {
 		}
 	}
 	os.Remove(target)
-}
-
-func sameError(a, b error) bool {
-	if a == b {
-		return true
-	}
-	return fmt.Sprint(a) == fmt.Sprint(b)
 }
 
 func build(goos, builder, path, target string) error {
