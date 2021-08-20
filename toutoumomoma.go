@@ -24,7 +24,7 @@ var ErrUnknownFormat = errors.New("unknown format")
 // Stripped examines the file at the given path and returns whether it is
 // likely to be a Go executable that has had its symbols stripped.
 // If the file at path is not an ELF, Mach-O or PE format executable,
-// Stripped will return ErrUnkownFormat.
+// Stripped will return ErrUnknownFormat.
 func Stripped(path string) (sneaky bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -127,7 +127,7 @@ func Stripped(path string) (sneaky bool, err error) {
 //  kernel32.waitformultipleobjects
 //
 // If the file at path is not an ELF, Mach-O or PE format executable,
-// ImportHash will return ErrUnkownFormat.
+// ImportHash will return ErrUnknownFormat.
 func ImportHash(path string) (hash []byte, imports []string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
