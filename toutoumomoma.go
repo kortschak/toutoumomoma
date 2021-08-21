@@ -10,6 +10,7 @@ import (
 	"debug/elf"
 	"debug/macho"
 	"debug/pe"
+	"debug/plan9obj"
 	"errors"
 	"fmt"
 	"io"
@@ -23,8 +24,8 @@ var ErrUnknownFormat = errors.New("unknown format")
 
 // Stripped examines the file at the given path and returns whether it is
 // likely to be a Go executable that has had its symbols stripped.
-// If the file at path is not an ELF, Mach-O or PE format executable,
-// Stripped will return ErrUnknownFormat.
+// If the file at path is not an ELF, Mach-O, plan9obj or PE format
+// executable, Stripped will return ErrUnknownFormat.
 func Stripped(path string) (sneaky bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -64,7 +65,7 @@ func Stripped(path string) (sneaky bool, err error) {
 		}
 		return false, nil
 
-	case bytes.Equal(magic[:3], []byte("\xFE\xED\xFA")) || bytes.Equal(magic[1:], []byte("\xFA\xED\xFE")):
+	case bytes.Equal(magic[:3], []byte("\xfe\xed\xfa")), bytes.Equal(magic[1:], []byte("\xfa\xed\xfe")):
 		exe, err := macho.NewFile(f)
 		if err != nil {
 			return false, err
@@ -98,6 +99,31 @@ func Stripped(path string) (sneaky bool, err error) {
 		}
 		return bytes.Contains(rdata, []byte("runtime.g")), nil
 
+	case bytes.Equal(magic[:], []byte("\x00\x00\x01\xeb")),
+		bytes.Equal(magic[:], []byte("\x00\x00\x8a\x97")),
+		bytes.Equal(magic[:], []byte("\x00\x00\x06G")):
+		exe, err := plan9obj.NewFile(f)
+		if err != nil {
+			return false, err
+		}
+		sym, err := exe.Symbols()
+		if err != nil {
+			if err == elf.ErrNoSymbols {
+				return true, nil
+			}
+			return true, err
+		}
+		for _, s := range sym {
+			if s.Name == "go.buildid" {
+				return false, nil
+			}
+		}
+		text, err := exe.Section("text").Data()
+		if err != nil {
+			return false, err
+		}
+		return bytes.Contains(text, []byte("runtime.g")), nil
+
 	default:
 		return false, ErrUnknownFormat
 	}
@@ -126,8 +152,11 @@ func Stripped(path string) (sneaky bool, err error) {
 //  kernel32.writeconsolew
 //  kernel32.waitformultipleobjects
 //
-// If the file at path is not an ELF, Mach-O or PE format executable,
-// ImportHash will return ErrUnknownFormat.
+// Plan9 does not support dynamic linking so ImportHash will always return values
+// for the empty set of imports, md5("") and nil, for the plan9obj format.
+//
+// If the file at path is not an ELF, Mach-O, plan9obj or PE format
+// executable, ImportHash will return ErrUnknownFormat.
 func ImportHash(path string) (hash []byte, imports []string, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -167,7 +196,7 @@ func ImportHash(path string) (hash []byte, imports []string, err error) {
 		}
 		return h.Sum(nil), imports, nil
 
-	case bytes.Equal(magic[:3], []byte("\xFE\xED\xFA")) || bytes.Equal(magic[1:], []byte("\xFA\xED\xFE")):
+	case bytes.Equal(magic[:3], []byte("\xfe\xed\xfa")), bytes.Equal(magic[1:], []byte("\xfa\xed\xfe")):
 		// Algorithm based on the PE imphash algorithm below.
 
 		exe, err := macho.NewFile(f)
@@ -215,6 +244,15 @@ func ImportHash(path string) (hash []byte, imports []string, err error) {
 			fmt.Fprint(h, imports[i])
 		}
 		return h.Sum(nil), imports, nil
+
+	case bytes.Equal(magic[:], []byte("\x00\x00\x01\xeb")),
+		bytes.Equal(magic[:], []byte("\x00\x00\x8a\x97")),
+		bytes.Equal(magic[:], []byte("\x00\x00\x06G")):
+		// Algorithm based on the PE imphash algorithm above
+		// except that plan9 does not have dynamically linked
+		// libraries, so don't even bother trying.
+
+		return []byte("\xd4\x1d\x8c\xd9\x8f\x00\xb2\x04\xe9\x80\x09\x98\xec\xf8\x42\x7e"), nil, nil
 
 	default:
 		return nil, nil, ErrUnknownFormat

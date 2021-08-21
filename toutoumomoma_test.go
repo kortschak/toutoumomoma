@@ -32,6 +32,7 @@ func TestToutoumomoma(t *testing.T) {
 	for _, goos := range []string{
 		"linux",
 		"darwin",
+		"plan9",
 		"windows",
 	} {
 		for _, builder := range []string{
@@ -68,6 +69,7 @@ func TestToutoumomoma(t *testing.T) {
 					want := map[string]string{
 						"darwin":  "d3ccf195b62a9279c3c19af1080497ec",
 						"linux":   "d41d8cd98f00b204e9800998ecf8427e", // No dynamic imports.
+						"plan9":   "d41d8cd98f00b204e9800998ecf8427e", // No dynamic imports.
 						"windows": "c7269d59926fa4252270f407e4dab043",
 					}
 
@@ -119,6 +121,7 @@ func TestToutoumomoma(t *testing.T) {
 							"_write",
 						},
 						"linux": nil,
+						"plan9": nil,
 						"windows": {
 							"kernel32.writefile",
 							"kernel32.writeconsolew",
