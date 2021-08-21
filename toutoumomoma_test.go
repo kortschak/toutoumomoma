@@ -20,7 +20,9 @@ func TestToutoumomoma(t *testing.T) {
 	)
 
 	flagSets := map[string][][]string{
-		"go": nil,
+		"go": {
+			nil,
+		},
 		"garble": {
 			nil,
 			{"-literals"},
@@ -73,7 +75,7 @@ func TestToutoumomoma(t *testing.T) {
 						"windows": "c7269d59926fa4252270f407e4dab043",
 					}
 
-					// Obtained by inspection of debug/pe output.
+					// Obtained by inspection of debug/{elf,macho,pe,plan9obj} output.
 					wantImports := map[string][]string{
 						"darwin": {
 							"___error",
@@ -178,6 +180,90 @@ func TestToutoumomoma(t *testing.T) {
 					if !reflect.DeepEqual(gotImports, wantImports[goos]) {
 						t.Errorf("unexpected imports for GOOS=%s %s: got:%v want:%v",
 							goos, cmd, gotImports, wantImports[goos])
+					}
+				})
+
+				t.Run(fmt.Sprintf("SymbolHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
+					// The expectation matrix is more complex than suggested by
+					// this example. Darwin behaves differently to the three other
+					// GOOS when the program is more complex, but this is enough
+					// to test the system. Where Darwin behaves differently, it
+					// retains symbols more than the others.
+					//
+					// An example of this:
+					//  package main
+					//
+					//  import (
+					//  	"fmt"
+					//
+					//  	"github.com/kortschak/ct"
+					//  )
+					//
+					//  func main() {
+					//  	blue := (ct.Fg(ct.BoldYellow)).Paint
+					//  	fmt.Println(blue("hello, world"))
+					//  }
+					//
+					// Which gives the following symbol list, in pseudo-Go
+					// with the key being GOOS, builder, flags:
+					//
+					//  {"darwin", "*", "*"}: {
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  },
+					//  {"linux", "go", ""}: {
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  },
+					//  {"plan9", "go", ""}: {
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  },
+					//  {"windows", "go", ""}: {
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  },
+					//  {"!darwin", "garble", "*"}: nil,
+
+					want := map[string]string{
+						"go":     "b10a099a8babcdf0283916af8fa87240",
+						"garble": "d41d8cd98f00b204e9800998ecf8427e",
+					}
+
+					// Obtained by inspection of go tool objdump output.
+					wantImports := map[string][]string{
+						"go": {
+							"github.com/kortschak/toutoumomoma/testdata/b.Used",
+							"github.com/kortschak/toutoumomoma/testdata/b.hash",
+						},
+						"garble": nil,
+					}
+
+					got, gotSymbols, err := GoSymbolHash(target, false)
+					if err != nil {
+						t.Errorf("unexpected error hashing executable imports for GOOS=%s %s: %v",
+							goos, cmd, err)
+						return
+					}
+
+					if fmt.Sprintf("%x", got) != want[builder] {
+						t.Errorf("unexpected hash for executable for GOOS=%s %s: got:%x want:%s",
+							goos, cmd, got, want[builder])
+					}
+					if !reflect.DeepEqual(gotSymbols, wantImports[builder]) {
+						t.Errorf("unexpected symbols for GOOS=%s %s: got:%v want:%v",
+							goos, cmd, gotSymbols, wantImports[builder])
 					}
 				})
 			}

@@ -19,8 +19,13 @@ import (
 	"strings"
 )
 
-// ErrUnknownFormat is returned for files that are not recognized.
-var ErrUnknownFormat = errors.New("unknown format")
+var (
+	// ErrUnknownFormat is returned for files that are not recognized.
+	ErrUnknownFormat = errors.New("unknown format")
+
+	// ErrNotGoExecutable indicates a file was not a Go executable.
+	ErrNotGoExecutable = errors.New("not a Go executable")
+)
 
 // Stripped examines the file at the given path and returns whether it is
 // likely to be a Go executable that has had its symbols stripped.
@@ -267,4 +272,238 @@ func canonicaliseImport(imp string) (string, error) {
 	lib := strings.TrimSuffix(parts[1], path.Ext(parts[1]))
 	fn := parts[0]
 	return lib + "." + fn, nil
+}
+
+// GoSymbolHash returns the symbol hash of a Go executable and the list of symbols
+// in the executable examined to generate the hash. If stdlib is true, symbols
+// from the Go standard library are included, otherwise only third-party symbols
+// are considered.
+//
+// If the file at path is not an ELF, Mach-O, plan9obj or PE format executable,
+// GoSymbolHash will return ErrUnknownFormat. If it an executable, but not a
+// gc-compiled Go executable, ErrNotGoExecutable will be returned.
+func GoSymbolHash(path string, stdlib bool) (hash []byte, imports []string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+
+	var magic [4]byte
+	_, err = f.ReadAt(magic[:], 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch {
+	case bytes.Equal(magic[:], []byte("\x7FELF")):
+		exe, err := elf.NewFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		var isGo bool
+	elfLoop:
+		for _, section := range exe.Sections {
+			switch section.Name {
+			case ".gosymtab", ".gopclntab", ".go.buildinfo":
+				isGo = true
+				break elfLoop
+			}
+		}
+		if !isGo {
+			return nil, nil, ErrNotGoExecutable
+		}
+
+		syms, err := exe.Symbols()
+		if err != nil && err != elf.ErrNoSymbols {
+			return nil, nil, err
+		}
+		h := md5.New()
+		if len(syms) == 0 {
+			return h.Sum(nil), nil, nil
+		}
+		imports = make([]string, 0, len(syms))
+		for _, sym := range syms {
+			switch sym.Section {
+			case elf.SHN_UNDEF, elf.SHN_COMMON:
+				continue
+			}
+			if strings.HasPrefix(sym.Name, "type..") {
+				continue
+			}
+			if !stdlib && isStdlib(sym.Name) {
+				continue
+			}
+			i := int(sym.Section)
+			if i < 0 || i >= len(exe.Sections) {
+				continue
+			}
+			sect := exe.Sections[i]
+			if sect.Flags&(elf.SHF_ALLOC|elf.SHF_EXECINSTR) == elf.SHF_ALLOC|elf.SHF_EXECINSTR {
+				if len(imports) != 0 {
+					_, _ = h.Write([]byte{','})
+				}
+				imports = append(imports, sym.Name)
+				fmt.Fprint(h, sym.Name)
+			}
+		}
+		if len(imports) == 0 {
+			imports = nil
+		}
+		return h.Sum(nil), imports, nil
+
+	case bytes.Equal(magic[:3], []byte("\xfe\xed\xfa")), bytes.Equal(magic[1:], []byte("\xfa\xed\xfe")):
+		exe, err := macho.NewFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		var isGo bool
+	machOLoop:
+		for _, section := range exe.Sections {
+			switch section.Name {
+			case "__gosymtab", "__gopclntab", "__go_buildinfo":
+				isGo = true
+				break machOLoop
+			}
+		}
+		if !isGo {
+			return nil, nil, ErrNotGoExecutable
+		}
+
+		h := md5.New()
+		imports = make([]string, 0, len(exe.Symtab.Syms))
+		for _, sym := range exe.Symtab.Syms {
+			if sym.Sect == 0 || int(sym.Sect) > len(exe.Sections) {
+				continue
+			}
+			sect := exe.Sections[sym.Sect-1]
+			if sect.Seg != "__TEXT" || sect.Name != "__text" {
+				continue
+			}
+			if strings.HasPrefix(sym.Name, "type..") {
+				continue
+			}
+			if !stdlib && isStdlib(sym.Name) {
+				continue
+			}
+			if len(imports) != 0 {
+				_, _ = h.Write([]byte{','})
+			}
+			imports = append(imports, sym.Name)
+			fmt.Fprint(h, sym.Name)
+		}
+		if len(imports) == 0 {
+			imports = nil
+		}
+		return h.Sum(nil), imports, nil
+
+	case bytes.Equal(magic[:2], []byte("MZ")):
+		exe, err := pe.NewFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		rdata, err := exe.Section(".rdata").Data()
+		if err != nil {
+			return nil, nil, err
+		}
+		if !bytes.Contains(rdata, []byte("runtime.g")) {
+			return nil, nil, ErrNotGoExecutable
+		}
+
+		h := md5.New()
+		imports = make([]string, 0, len(exe.Symbols))
+		for _, sym := range exe.Symbols {
+			// https://wiki.osdev.org/COFF#Symbol_Table
+			const (
+				N_UNDEF = 0
+				N_ABS   = -1
+				N_DEBUG = -2
+			)
+			switch sym.SectionNumber {
+			case N_UNDEF, N_ABS, N_DEBUG:
+				continue
+			}
+			if sym.SectionNumber < 0 || len(exe.Sections) < int(sym.SectionNumber) {
+				return nil, nil, fmt.Errorf("invalid section number in symbol table")
+			}
+
+			const STYP_TEXT = 0x20 // https://wiki.osdev.org/COFF#Section_Header
+			if exe.Sections[sym.SectionNumber-1].Characteristics&STYP_TEXT == 0 {
+				continue
+			}
+
+			if strings.HasPrefix(sym.Name, "type..") {
+				continue
+			}
+			if !stdlib && isStdlib(sym.Name) {
+				continue
+			}
+			if len(imports) != 0 {
+				_, _ = h.Write([]byte{','})
+			}
+			imports = append(imports, sym.Name)
+			fmt.Fprint(h, sym.Name)
+		}
+		if len(imports) == 0 {
+			imports = nil
+		}
+		return h.Sum(nil), imports, nil
+
+	case bytes.Equal(magic[:], []byte("\x00\x00\x01\xeb")),
+		bytes.Equal(magic[:], []byte("\x00\x00\x8a\x97")),
+		bytes.Equal(magic[:], []byte("\x00\x00\x06G")):
+
+		exe, err := plan9obj.NewFile(f)
+		if err != nil {
+			return nil, nil, err
+		}
+		text, err := exe.Section("text").Data()
+		if err != nil {
+			return nil, nil, err
+		}
+		if !bytes.Contains(text, []byte("runtime.g")) {
+			return nil, nil, ErrNotGoExecutable
+		}
+
+		syms, err := exe.Symbols()
+		if err != nil && err != elf.ErrNoSymbols {
+			return nil, nil, err
+		}
+		h := md5.New()
+		if len(syms) == 0 {
+			return h.Sum(nil), nil, nil
+		}
+		imports = make([]string, 0, len(syms))
+		for _, sym := range syms {
+			if sym.Type != 'T' {
+				continue
+			}
+			if strings.HasPrefix(sym.Name, "type..") {
+				continue
+			}
+			if !stdlib && isStdlib(sym.Name) {
+				continue
+			}
+			if len(imports) != 0 {
+				_, _ = h.Write([]byte{','})
+			}
+			imports = append(imports, sym.Name)
+			fmt.Fprint(h, sym.Name)
+		}
+		if len(imports) == 0 {
+			imports = nil
+		}
+		return h.Sum(nil), imports, nil
+
+	default:
+		return nil, nil, ErrUnknownFormat
+	}
+}
+
+func isStdlib(s string) bool {
+	slash := strings.IndexByte(s, '/')
+	if slash < 0 {
+		return true
+	}
+	dot := strings.IndexByte(s[:slash], '.')
+	return dot < 0
 }

@@ -1,7 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/kortschak/toutoumomoma/testdata/b"
+)
 
 func main() {
-	fmt.Println("hello, world")
+	fmt.Println(b.Used("hello, world"))
 }
