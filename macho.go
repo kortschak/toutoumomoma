@@ -48,11 +48,7 @@ func (f *machoFile) hasBuildID() (ok bool, err error) {
 }
 
 func (f *machoFile) hasRealFiles() (ok bool, err error) {
-	textStart, symtab, pclntab, err := f.pcln()
-	if err != nil {
-		return false, err
-	}
-	tab, err := gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
+	tab, err := f.pclnTable()
 	if err != nil {
 		return false, err
 	}
@@ -83,6 +79,10 @@ func (f *machoFile) importedSymbols() ([]string, error) {
 }
 
 func (f *machoFile) goSymbols(stdlib bool) ([]string, error) {
+	tab, err := f.pclnTable()
+	if err != nil {
+		return nil, err
+	}
 	imports := make([]string, 0, len(f.objFile.Symtab.Syms))
 	for _, sym := range f.objFile.Symtab.Syms {
 		if sym.Sect == 0 || int(sym.Sect) > len(f.objFile.Sections) {
@@ -95,7 +95,7 @@ func (f *machoFile) goSymbols(stdlib bool) ([]string, error) {
 		if strings.HasPrefix(sym.Name, "type..") {
 			continue
 		}
-		if !stdlib && isStdlib(sym.Name) {
+		if !stdlib && isStdlib(sym.Name, sym.Value, tab) {
 			continue
 		}
 		imports = append(imports, sym.Name)
@@ -104,4 +104,12 @@ func (f *machoFile) goSymbols(stdlib bool) ([]string, error) {
 		imports = nil
 	}
 	return imports, nil
+}
+
+func (f *machoFile) pclnTable() (*gosym.Table, error) {
+	textStart, symtab, pclntab, err := f.pcln()
+	if err != nil {
+		return nil, nil
+	}
+	return gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
 }

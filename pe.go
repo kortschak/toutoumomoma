@@ -51,11 +51,7 @@ func (f *peFile) hasBuildID() (ok bool, err error) {
 }
 
 func (f *peFile) hasRealFiles() (ok bool, err error) {
-	textStart, symtab, pclntab, err := f.pcln()
-	if err != nil {
-		return false, err
-	}
-	tab, err := gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
+	tab, err := f.pclnTable()
 	if err != nil {
 		return false, err
 	}
@@ -99,6 +95,10 @@ func canonicaliseImport(imp string) (string, error) {
 }
 
 func (f *peFile) goSymbols(stdlib bool) ([]string, error) {
+	tab, err := f.pclnTable()
+	if err != nil {
+		return nil, err
+	}
 	imports := make([]string, 0, len(f.objFile.Symbols))
 	for _, sym := range f.objFile.Symbols {
 		// https://wiki.osdev.org/COFF#Symbol_Table
@@ -123,7 +123,7 @@ func (f *peFile) goSymbols(stdlib bool) ([]string, error) {
 		if strings.HasPrefix(sym.Name, "type..") {
 			continue
 		}
-		if !stdlib && isStdlib(sym.Name) {
+		if !stdlib && isStdlib(sym.Name, uint64(sym.Value), tab) {
 			continue
 		}
 		imports = append(imports, sym.Name)
@@ -132,4 +132,12 @@ func (f *peFile) goSymbols(stdlib bool) ([]string, error) {
 		imports = nil
 	}
 	return imports, nil
+}
+
+func (f *peFile) pclnTable() (*gosym.Table, error) {
+	textStart, symtab, pclntab, err := f.pcln()
+	if err != nil {
+		return nil, nil
+	}
+	return gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
 }

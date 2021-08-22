@@ -57,11 +57,7 @@ func (f *plan9File) hasBuildID() (ok bool, err error) {
 }
 
 func (f *plan9File) hasRealFiles() (ok bool, err error) {
-	textStart, symtab, pclntab, err := f.pcln()
-	if err != nil {
-		return false, err
-	}
-	tab, err := gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
+	tab, err := f.pclnTable()
 	if err != nil {
 		return false, err
 	}
@@ -99,6 +95,10 @@ func (f *plan9File) goSymbols(stdlib bool) ([]string, error) {
 	if len(syms) == 0 {
 		return nil, nil
 	}
+	tab, err := f.pclnTable()
+	if err != nil {
+		return nil, err
+	}
 	imports := make([]string, 0, len(syms))
 	for _, sym := range syms {
 		if sym.Type != 'T' {
@@ -107,7 +107,7 @@ func (f *plan9File) goSymbols(stdlib bool) ([]string, error) {
 		if strings.HasPrefix(sym.Name, "type..") {
 			continue
 		}
-		if !stdlib && isStdlib(sym.Name) {
+		if !stdlib && isStdlib(sym.Name, sym.Value, tab) {
 			continue
 		}
 		imports = append(imports, sym.Name)
@@ -116,4 +116,12 @@ func (f *plan9File) goSymbols(stdlib bool) ([]string, error) {
 		return nil, nil
 	}
 	return imports, nil
+}
+
+func (f *plan9File) pclnTable() (*gosym.Table, error) {
+	textStart, symtab, pclntab, err := f.pcln()
+	if err != nil {
+		return nil, nil
+	}
+	return gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
 }

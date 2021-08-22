@@ -7,6 +7,7 @@ package toutoumomoma
 import (
 	"bytes"
 	"crypto/md5"
+	"debug/gosym"
 	"errors"
 	"fmt"
 	"io"
@@ -249,7 +250,13 @@ func GoSymbolHash(path string, stdlib bool) (hash []byte, imports []string, err 
 	return f.GoSymbolHash(stdlib)
 }
 
-func isStdlib(s string) bool {
+func isStdlib(s string, addr uint64, tab *gosym.Table) bool {
+	if tab != nil {
+		file, _, _ := tab.PCToLine(addr)
+		if file == "??" {
+			return false
+		}
+	}
 	slash := strings.IndexByte(s, '/')
 	if slash < 0 {
 		return true

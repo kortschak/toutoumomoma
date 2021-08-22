@@ -183,12 +183,11 @@ func TestToutoumomoma(t *testing.T) {
 					}
 				})
 
-				t.Run(fmt.Sprintf("SymbolHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
+				t.Run(fmt.Sprintf("GoSymbolHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
 					// The expectation matrix is more complex than suggested by
 					// this example. Darwin behaves differently to the three other
 					// GOOS when the program is more complex, but this is enough
-					// to test the system. Where Darwin behaves differently, it
-					// retains symbols more than the others.
+					// to test the system.
 					//
 					// An example of this:
 					//  package main
@@ -204,16 +203,9 @@ func TestToutoumomoma(t *testing.T) {
 					//  	fmt.Println(blue("hello, world"))
 					//  }
 					//
-					// Which gives the following symbol list, in pseudo-Go
-					// with the key being GOOS, builder, flags:
+					// Which gives the following symbol list, in the same,
+					// but fully enumerate, format as below:
 					//
-					//  {"darwin", "*", "*"}: {
-					//  	"github.com/kortschak/ct.(*text).Format",
-					//  	"github.com/kortschak/ct.Mode.Paint-fm",
-					//  	"github.com/kortschak/ct.Mode.set",
-					//  	"github.com/kortschak/ct.doesString",
-					//  	"github.com/kortschak/ct.text.Format",
-					//  },
 					//  {"linux", "go", ""}: {
 					//  	"github.com/kortschak/ct.doesString",
 					//  	"github.com/kortschak/ct.text.Format",
@@ -234,20 +226,85 @@ func TestToutoumomoma(t *testing.T) {
 					//  	"github.com/kortschak/ct.(*text).Format",
 					//  	"github.com/kortschak/ct.Mode.Paint-fm",
 					//  },
-					//  {"!darwin", "garble", "*"}: nil,
+					//  {"darwin", "go", ""}: {
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  },
+					//  {"darwin", "garble", ""}: {
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  	"main.main",
+					//  },
+					//  {"darwin", "garble", "-literals"}: {
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  	"main.main",
+					//  },
+					//  {"darwin", "garble", "-tiny"}: {
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  	"main.main",
+					//  },
+					//  {"darwin", "garble", "-literals -tiny"}: {
+					//  	"github.com/kortschak/ct.(*text).Format",
+					//  	"github.com/kortschak/ct.Mode.Paint-fm",
+					//  	"github.com/kortschak/ct.Mode.set",
+					//  	"github.com/kortschak/ct.doesString",
+					//  	"github.com/kortschak/ct.text.Format",
+					//  	"main.main",
+					//  	"main.main.func1",
+					//  },
 
-					want := map[string]string{
-						"go":     "b10a099a8babcdf0283916af8fa87240",
-						"garble": "d41d8cd98f00b204e9800998ecf8427e",
+					want := map[[3]string]string{
+						{"*", "go", "*"}:                        "b10a099a8babcdf0283916af8fa87240",
+						{"!darwin", "garble", "*"}:              "d41d8cd98f00b204e9800998ecf8427e", // No symbols.
+						{"darwin", "garble", ""}:                "b35794f6a683fa510d8bf21662040c5b",
+						{"darwin", "garble", "-literals"}:       "ad9fdd298a6bbd1a858bbf288c584ebf",
+						{"darwin", "garble", "-tiny"}:           "5fdd63bb263be6bf40fb2e0a777cd684",
+						{"darwin", "garble", "-literals -tiny"}: "9b7b95b36a6bb3ac7d03efd2dfbf1581",
 					}
 
 					// Obtained by inspection of go tool objdump output.
-					wantImports := map[string][]string{
-						"go": {
+					wantImports := map[[3]string][]string{
+						{"*", "go", "*"}: {
 							"github.com/kortschak/toutoumomoma/testdata/b.Used",
 							"github.com/kortschak/toutoumomoma/testdata/b.hash",
 						},
-						"garble": nil,
+						{"!darwin", "garble", "*"}: nil,
+						{"darwin", "garble", ""}: {
+							"GVIZ4KYA.KHQugUVc",
+							"main.main",
+						},
+						{"darwin", "garble", "-literals"}: {
+							"O7lriW_C.CAoMumwA",
+							"main.main",
+						},
+						{"darwin", "garble", "-tiny"}: {
+							"cuhWBpNN.UdKuKFM6",
+							"cuhWBpNN.xHxgIA1D",
+							"main.main",
+						},
+						{"darwin", "garble", "-literals -tiny"}: {
+							"QveJ1vL_.JaVs4nPd",
+							"QveJ1vL_.JaVs4nPd.func1",
+							"QveJ1vL_.JaVs4nPd.func1.1",
+							"QveJ1vL_.bzzSe7GA",
+							"QveJ1vL_.bzzSe7GA.func1",
+							"main.main",
+							"main.main.func1",
+						},
 					}
 
 					got, gotSymbols, err := GoSymbolHash(target, false)
@@ -257,13 +314,23 @@ func TestToutoumomoma(t *testing.T) {
 						return
 					}
 
-					if fmt.Sprintf("%x", got) != want[builder] {
-						t.Errorf("unexpected hash for executable for GOOS=%s %s: got:%x want:%s",
-							goos, cmd, got, want[builder])
+					buildFor := [3]string{goos, builder, strings.Join(flags, " ")}
+					switch {
+					case builder == "go":
+						buildFor[0] = "*"
+						buildFor[2] = "*"
+					case goos != "darwin":
+						buildFor[0] = "!darwin"
+						buildFor[2] = "*"
 					}
-					if !reflect.DeepEqual(gotSymbols, wantImports[builder]) {
+
+					if fmt.Sprintf("%x", got) != want[buildFor] {
+						t.Errorf("unexpected hash for executable for GOOS=%s %s: got:%x want:%s",
+							goos, cmd, got, want[buildFor])
+					}
+					if !reflect.DeepEqual(gotSymbols, wantImports[buildFor]) {
 						t.Errorf("unexpected symbols for GOOS=%s %s: got:%v want:%v",
-							goos, cmd, gotSymbols, wantImports[builder])
+							goos, cmd, gotSymbols, wantImports[buildFor])
 					}
 				})
 			}
