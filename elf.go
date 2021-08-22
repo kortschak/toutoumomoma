@@ -6,6 +6,7 @@ package toutoumomoma
 
 import (
 	"debug/elf"
+	"debug/gosym"
 	"os"
 	"strings"
 )
@@ -44,6 +45,34 @@ func (f *elfFile) hasBuildID() (ok bool, err error) {
 	}
 	_, err = sect.Data()
 	return err == nil, err
+}
+
+func (f *elfFile) hasRealFiles() (ok bool, err error) {
+	textStart, symtab, pclntab, err := f.pcln()
+	if err != nil {
+		return false, err
+	}
+	tab, err := gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
+	if err != nil {
+		return false, err
+	}
+	symbols, err := f.objFile.Symbols()
+	if err != nil {
+		return false, err
+	}
+	if len(symbols) == 0 {
+		return false, nil
+	}
+	for _, sym := range symbols {
+		if sym.Name != "main.main" {
+			continue
+		}
+		file, _, _ := tab.PCToLine(sym.Value)
+		if file == "??" {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (f *elfFile) importedSymbols() ([]string, error) {

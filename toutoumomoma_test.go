@@ -51,8 +51,7 @@ func TestToutoumomoma(t *testing.T) {
 				}
 
 				t.Run(fmt.Sprintf("Stripped_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
-					// Darwin does not strip symbols. See comment below.
-					want := builder == "garble" && goos != "darwin"
+					want := builder == "garble"
 
 					got, err := Stripped(target)
 					if err != nil {

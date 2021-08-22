@@ -7,6 +7,7 @@ package toutoumomoma
 import (
 	"bytes"
 	"debug/elf"
+	"debug/gosym"
 	"debug/plan9obj"
 	"os"
 	"strings"
@@ -53,6 +54,34 @@ func (f *plan9File) hasBuildID() (ok bool, err error) {
 		}
 	}
 	return false, nil
+}
+
+func (f *plan9File) hasRealFiles() (ok bool, err error) {
+	textStart, symtab, pclntab, err := f.pcln()
+	if err != nil {
+		return false, err
+	}
+	tab, err := gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
+	if err != nil {
+		return false, err
+	}
+	symbols, err := f.objFile.Symbols()
+	if err != nil {
+		return false, err
+	}
+	if len(symbols) == 0 {
+		return false, nil
+	}
+	for _, sym := range symbols {
+		if sym.Name != "main.main" {
+			continue
+		}
+		file, _, _ := tab.PCToLine(sym.Value)
+		if file == "??" {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (f *plan9File) importedSymbols() ([]string, error) {

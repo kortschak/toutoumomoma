@@ -6,6 +6,7 @@ package toutoumomoma
 
 import (
 	"bytes"
+	"debug/gosym"
 	"debug/pe"
 	"fmt"
 	"os"
@@ -47,6 +48,30 @@ func (f *peFile) hasBuildID() (ok bool, err error) {
 		}
 	}
 	return false, nil
+}
+
+func (f *peFile) hasRealFiles() (ok bool, err error) {
+	textStart, symtab, pclntab, err := f.pcln()
+	if err != nil {
+		return false, err
+	}
+	tab, err := gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
+	if err != nil {
+		return false, err
+	}
+	if len(f.objFile.Symbols) == 0 {
+		return false, nil
+	}
+	for _, sym := range f.objFile.Symbols {
+		if sym.Name != "main.main" {
+			continue
+		}
+		file, _, _ := tab.PCToLine(uint64(sym.Value))
+		if file == "??" {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (f *peFile) importedSymbols() ([]string, error) {

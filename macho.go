@@ -5,6 +5,7 @@
 package toutoumomoma
 
 import (
+	"debug/gosym"
 	"debug/macho"
 	"os"
 	"strings"
@@ -44,6 +45,30 @@ func (f *machoFile) hasBuildID() (ok bool, err error) {
 	}
 	_, err = sect.Data()
 	return err == nil, err
+}
+
+func (f *machoFile) hasRealFiles() (ok bool, err error) {
+	textStart, symtab, pclntab, err := f.pcln()
+	if err != nil {
+		return false, err
+	}
+	tab, err := gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
+	if err != nil {
+		return false, err
+	}
+	if len(f.objFile.Symtab.Syms) == 0 {
+		return false, nil
+	}
+	for _, sym := range f.objFile.Symtab.Syms {
+		if sym.Name != "main.main" {
+			continue
+		}
+		file, _, _ := tab.PCToLine(sym.Value)
+		if file == "??" {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (f *machoFile) importedSymbols() ([]string, error) {

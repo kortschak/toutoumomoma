@@ -30,6 +30,7 @@ type File struct {
 type file interface {
 	isGoExecutable() (ok bool, err error)
 	hasBuildID() (ok bool, err error)
+	hasRealFiles() (ok bool, err error)
 	importedSymbols() ([]string, error)
 	goSymbols(stdlib bool) ([]string, error)
 	io.Closer
@@ -122,7 +123,17 @@ func (f *File) Stripped() (sneaky bool, err error) {
 		return false, nil
 	}
 	hasBuildID, err := f.hasBuildID()
-	return !hasBuildID, err
+	if err != nil {
+		return false, err
+	}
+	if !hasBuildID {
+		return true, nil
+	}
+	hasRealFiles, err := f.hasRealFiles()
+	if err != nil {
+		return false, err
+	}
+	return !hasRealFiles, nil
 }
 
 // ImportHash returns the import hash of an executable and the list of dynamic imports
