@@ -40,7 +40,8 @@ type file interface {
 // Open opens the file at at the provided path.
 //
 // If the file at path is not an ELF, Mach-O, plan9obj or PE format
-// executable, ImportHash will return ErrUnknownFormat.
+// executable, ImportHash will return ErrUnknownFormat. Files without
+// execute permissions may be opened.
 func Open(path string) (*File, error) {
 	f, err := os.Open(path)
 	if err != nil {
