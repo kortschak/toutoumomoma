@@ -51,9 +51,11 @@ func Open(path string) (*File, error) {
 	var magic [4]byte
 	_, err = f.ReadAt(magic[:], 0)
 	if err != nil {
-		if err != io.EOF {
-			return nil, nil
+		f.Close()
+		if err == io.EOF {
+			err = ErrUnknownFormat
 		}
+		return nil, err
 	}
 	switch {
 	case bytes.Equal(magic[:], []byte("\x7FELF")):
@@ -88,6 +90,7 @@ func Open(path string) (*File, error) {
 		return &File{exe}, nil
 
 	default:
+		f.Close()
 		return nil, ErrUnknownFormat
 	}
 }
