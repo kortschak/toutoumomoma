@@ -6,7 +6,6 @@ package toutoumomoma
 
 import (
 	"bytes"
-	"debug/elf"
 	"debug/gosym"
 	"debug/plan9obj"
 	"os"
@@ -92,7 +91,7 @@ func (f *plan9File) importedSymbols() ([]string, error) {
 func (f *plan9File) goSymbols(stdlib bool) ([]string, error) {
 	syms, err := f.objFile.Symbols()
 	if err != nil {
-		if err == elf.ErrNoSymbols {
+		if f.objFile.Section("syms") == nil {
 			err = nil
 		}
 		return nil, err
