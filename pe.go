@@ -34,7 +34,11 @@ func (f *peFile) Close() error {
 func (f *peFile) isGoExecutable() (ok bool, err error) {
 	// TODO(kortschak): Investigate whether there is a better
 	// heuristic or a definitive test for this case.
-	rdata, err := f.objFile.Section(".rdata").Data()
+	sect := f.objFile.Section(".rdata")
+	if sect == nil {
+		return false, nil
+	}
+	rdata, err := sect.Data()
 	if err != nil {
 		return false, err
 	}

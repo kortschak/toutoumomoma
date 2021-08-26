@@ -33,7 +33,11 @@ func (f *plan9File) Close() error {
 func (f *plan9File) isGoExecutable() (ok bool, err error) {
 	// TODO(kortschak): Investigate whether there is a better
 	// heuristic or a definitive test for this case.
-	text, err := f.objFile.Section("text").Data()
+	sect := f.objFile.Section("text")
+	if sect == nil {
+		return false, nil
+	}
+	text, err := sect.Data()
 	if err != nil {
 		return false, err
 	}
