@@ -67,10 +67,11 @@ func (f *plan9File) hasRealFiles() (ok bool, err error) {
 	}
 	symbols, err := f.objFile.Symbols()
 	if err != nil {
+		// Sadly, plan9obj doesn't export the no symbol error value.
+		if f.objFile.Section("syms") == nil {
+			return false, nil
+		}
 		return false, err
-	}
-	if len(symbols) == 0 {
-		return false, nil
 	}
 	for _, sym := range symbols {
 		if sym.Name != "main.main" {

@@ -54,10 +54,10 @@ func (f *elfFile) hasRealFiles() (ok bool, err error) {
 	}
 	symbols, err := f.objFile.Symbols()
 	if err != nil {
+		if err == elf.ErrNoSymbols {
+			return false, nil
+		}
 		return false, err
-	}
-	if len(symbols) == 0 {
-		return false, nil
 	}
 	for _, sym := range symbols {
 		if sym.Name != "main.main" {
