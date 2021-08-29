@@ -270,10 +270,10 @@ func TestToutoumomoma(t *testing.T) {
 					want := map[[3]string]string{
 						{"*", "go", "*"}:                        "b10a099a8babcdf0283916af8fa87240",
 						{"!darwin", "garble", "*"}:              "d41d8cd98f00b204e9800998ecf8427e", // No symbols.
-						{"darwin", "garble", ""}:                "b35794f6a683fa510d8bf21662040c5b",
-						{"darwin", "garble", "-literals"}:       "ad9fdd298a6bbd1a858bbf288c584ebf",
-						{"darwin", "garble", "-tiny"}:           "5fdd63bb263be6bf40fb2e0a777cd684",
-						{"darwin", "garble", "-literals -tiny"}: "9b7b95b36a6bb3ac7d03efd2dfbf1581",
+						{"darwin", "garble", ""}:                "81ad8e9d7528ef595afebe3124f64709",
+						{"darwin", "garble", "-literals"}:       "155c951d9fb1782cc334a1508b038fb9",
+						{"darwin", "garble", "-tiny"}:           "602ae57f76a164b6e0e2dcbdf0bdf5bd",
+						{"darwin", "garble", "-literals -tiny"}: "ab1b6fe467e1ccfd22ab50aca6afb439",
 					}
 
 					// Obtained by inspection of go tool objdump output.
@@ -284,24 +284,23 @@ func TestToutoumomoma(t *testing.T) {
 						},
 						{"!darwin", "garble", "*"}: nil,
 						{"darwin", "garble", ""}: {
-							"GVIZ4KYA.KHQugUVc",
+							"bkPYSmYe.OQNnrAXY",
 							"main.main",
 						},
 						{"darwin", "garble", "-literals"}: {
-							"O7lriW_C.CAoMumwA",
+							"GF2YkJwI.EKiCITp0",
 							"main.main",
 						},
 						{"darwin", "garble", "-tiny"}: {
-							"cuhWBpNN.UdKuKFM6",
-							"cuhWBpNN.xHxgIA1D",
+							"TOwBHPzl.XF2iNaVd",
+							"TOwBHPzl.bzWzX77_",
 							"main.main",
 						},
 						{"darwin", "garble", "-literals -tiny"}: {
-							"QveJ1vL_.JaVs4nPd",
-							"QveJ1vL_.JaVs4nPd.func1",
-							"QveJ1vL_.JaVs4nPd.func1.1",
-							"QveJ1vL_.bzzSe7GA",
-							"QveJ1vL_.bzzSe7GA.func1",
+							"Ag1I9czh.Be2apzTk",
+							"Ag1I9czh.Be2apzTk.func1",
+							"Ag1I9czh.eP3dBev5",
+							"Ag1I9czh.eP3dBev5.func1",
 							"main.main",
 							"main.main.func1",
 						},
