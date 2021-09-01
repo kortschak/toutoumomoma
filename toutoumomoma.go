@@ -34,6 +34,7 @@ type file interface {
 	hasRealFiles() (ok bool, err error)
 	importedSymbols() ([]string, error)
 	goSymbols(stdlib bool) ([]string, error)
+	sectionStats() []Section
 	io.Closer
 }
 
@@ -224,6 +225,18 @@ func (f *File) GoSymbolHash(stdlib bool) (hash []byte, imports []string, err err
 	return h.Sum(nil), imports, nil
 }
 
+// Sections returns the names and sizes of object file sections in the order
+// that they appear in file.
+func (f *File) Sections() []Section {
+	return f.sectionStats()
+}
+
+// Section holds basic executable section information.
+type Section struct {
+	Name string // Name is the platform-specific name of the section.
+	Size uint64 // Size if the uncompressed size of the section.
+}
+
 // Stripped is a convenience wrapper around File.Stripped.
 func Stripped(path string) (sneaky bool, err error) {
 	f, err := Open(path)
@@ -252,6 +265,16 @@ func GoSymbolHash(path string, stdlib bool) (hash []byte, imports []string, err 
 	}
 	defer f.Close()
 	return f.GoSymbolHash(stdlib)
+}
+
+// Sections is a convenience wrapper around File.Sections.
+func Sections(path string) ([]Section, error) {
+	f, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return f.Sections(), nil
 }
 
 func isStdlib(s string, addr uint64, tab *gosym.Table) bool {

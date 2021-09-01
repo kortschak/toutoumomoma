@@ -145,3 +145,11 @@ func (f *peFile) pclnTable() (*gosym.Table, error) {
 	}
 	return gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
 }
+
+func (f *peFile) sectionStats() []Section {
+	s := make([]Section, len(f.objFile.Sections))
+	for i, sect := range f.objFile.Sections {
+		s[i] = Section{Name: sect.Name, Size: uint64(sect.Size)}
+	}
+	return s
+}
