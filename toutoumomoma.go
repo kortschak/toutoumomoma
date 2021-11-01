@@ -234,7 +234,7 @@ func (f *File) Sections() []Section {
 // Section holds basic executable section information.
 type Section struct {
 	Name string // Name is the platform-specific name of the section.
-	Size uint64 // Size if the uncompressed size of the section.
+	Size uint64 // Size of the uncompressed size of the section.
 }
 
 // Stripped is a convenience wrapper around File.Stripped.
