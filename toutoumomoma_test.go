@@ -6,6 +6,7 @@ package toutoumomoma
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"reflect"
@@ -67,7 +68,8 @@ func TestToutoumomoma(t *testing.T) {
 
 				t.Run(fmt.Sprintf("ImportHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
 					// The Windows want value obtained by running the get_imphash function from
-					// https://github.com/erocarrera/pefile on the hello world executable.
+					// https://github.com/erocarrera/pefile and https://github.com/threatstream/symhash/
+					// on the hello world executable.
 					want := map[string]string{
 						"darwin":  "d3ccf195b62a9279c3c19af1080497ec",
 						"linux":   "d41d8cd98f00b204e9800998ecf8427e", // No dynamic imports.
@@ -308,6 +310,16 @@ func TestToutoumomoma(t *testing.T) {
 						},
 					}
 
+					const tol = 1
+					wantEntropy := map[[3]string]float64{
+						{"*", "go", "*"}:                        3.89,
+						{"!darwin", "garble", "*"}:              0,
+						{"darwin", "garble", ""}:                4.00,
+						{"darwin", "garble", "-literals"}:       4.21,
+						{"darwin", "garble", "-tiny"}:           4.58,
+						{"darwin", "garble", "-literals -tiny"}: 4.59,
+					}
+
 					got, gotSymbols, err := GoSymbolHash(target, false)
 					if err != nil {
 						t.Errorf("unexpected error hashing executable imports for GOOS=%s %s: %v",
@@ -334,6 +346,12 @@ func TestToutoumomoma(t *testing.T) {
 						t.Errorf("unexpected symbols for GOOS=%s %s: got:%v want:%v",
 							goos, cmd, gotSymbols, wantImports[buildFor])
 					}
+
+					gotEntropy := NameEntropy(gotSymbols)
+					if math.Abs(gotEntropy-wantEntropy[buildFor]) > tol {
+						t.Errorf("unexpected symbol name entropy for GOOS=%s %s: got:%v want:%v",
+							goos, cmd, gotEntropy, wantEntropy[buildFor])
+					}
 				})
 
 				// Only test with and without garble.
@@ -344,120 +362,121 @@ func TestToutoumomoma(t *testing.T) {
 					// Included purely for regression testing. ELF values confirmed
 					// by inspection of readelf output. We may expect these values
 					// to change with different builder versions.
+					const tol = 0.5
 					want := map[[2]string][]Section{
 						{"linux", "go"}: {
-							{Name: "", Size: 0x0},
-							{Name: ".text", Size: 0x7ff76},
-							{Name: ".rodata", Size: 0x35900},
-							{Name: ".shstrtab", Size: 0x17a},
-							{Name: ".typelink", Size: 0x4f0},
-							{Name: ".itablink", Size: 0x60},
-							{Name: ".gosymtab", Size: 0x0},
-							{Name: ".gopclntab", Size: 0x5a1e8},
-							{Name: ".go.buildinfo", Size: 0x20},
-							{Name: ".noptrdata", Size: 0x10720},
-							{Name: ".data", Size: 0x7810},
-							{Name: ".bss", Size: 0x2ef48},
-							{Name: ".noptrbss", Size: 0x5360},
-							{Name: ".zdebug_abbrev", Size: 0x119},
-							{Name: ".zdebug_line", Size: 0x1b8af},
-							{Name: ".zdebug_frame", Size: 0x5513},
-							{Name: ".debug_gdb_scripts", Size: 0x2c},
-							{Name: ".zdebug_info", Size: 0x31a5f},
-							{Name: ".zdebug_loc", Size: 0x1988b},
-							{Name: ".zdebug_ranges", Size: 0x8f8a},
-							{Name: ".note.go.buildid", Size: 0x64},
-							{Name: ".symtab", Size: 0xc5e8},
-							{Name: ".strtab", Size: 0xb288},
+							{Name: "", Size: 0x0, Entropy: 0},
+							{Name: ".text", Size: 0x7ffd6, Entropy: 6.17},
+							{Name: ".rodata", Size: 0x35920, Entropy: 4.35},
+							{Name: ".shstrtab", Size: 0x17a, Entropy: 4.33},
+							{Name: ".typelink", Size: 0x4f0, Entropy: 3.77},
+							{Name: ".itablink", Size: 0x60, Entropy: 2.04},
+							{Name: ".gosymtab", Size: 0x0, Entropy: 0},
+							{Name: ".gopclntab", Size: 0x5a1e8, Entropy: 5.47},
+							{Name: ".go.buildinfo", Size: 0x20, Entropy: 3.56},
+							{Name: ".noptrdata", Size: 0x10720, Entropy: 5.60},
+							{Name: ".data", Size: 0x7810, Entropy: 1.60},
+							{Name: ".bss", Size: 0x2ef48, Entropy: 7.99},
+							{Name: ".noptrbss", Size: 0x5360, Entropy: 7.97},
+							{Name: ".zdebug_abbrev", Size: 0x119, Entropy: 7.18},
+							{Name: ".zdebug_line", Size: 0x1b8ba, Entropy: 7.99},
+							{Name: ".zdebug_frame", Size: 0x551b, Entropy: 7.92},
+							{Name: ".debug_gdb_scripts", Size: 0x2c, Entropy: 4.26},
+							{Name: ".zdebug_info", Size: 0x31a14, Entropy: 7.99},
+							{Name: ".zdebug_loc", Size: 0x198d9, Entropy: 7.98},
+							{Name: ".zdebug_ranges", Size: 0x8fbc, Entropy: 7.78},
+							{Name: ".note.go.buildid", Size: 0x64, Entropy: 5.25},
+							{Name: ".symtab", Size: 0xc5e8, Entropy: 3.21},
+							{Name: ".strtab", Size: 0xb288, Entropy: 4.81},
 						},
 						{"linux", "garble"}: {
-							{Name: "", Size: 0x0},
-							{Name: ".text", Size: 0x7ff76},
-							{Name: ".rodata", Size: 0x35880},
-							{Name: ".shstrtab", Size: 0x94},
-							{Name: ".typelink", Size: 0x4f0},
-							{Name: ".itablink", Size: 0x60},
-							{Name: ".gosymtab", Size: 0x0},
-							{Name: ".gopclntab", Size: 0x593e8},
-							{Name: ".go.buildinfo", Size: 0x20},
-							{Name: ".noptrdata", Size: 0x10720},
-							{Name: ".data", Size: 0x77f0},
-							{Name: ".bss", Size: 0x2ef48},
-							{Name: ".noptrbss", Size: 0x5360},
+							{Name: "", Size: 0x0, Entropy: 0},
+							{Name: ".text", Size: 0x7ffd6, Entropy: 6.17},
+							{Name: ".rodata", Size: 0x35880, Entropy: 4.34},
+							{Name: ".shstrtab", Size: 0x94, Entropy: 4.27},
+							{Name: ".typelink", Size: 0x4f0, Entropy: 3.77},
+							{Name: ".itablink", Size: 0x60, Entropy: 2.16},
+							{Name: ".gosymtab", Size: 0x0, Entropy: 0},
+							{Name: ".gopclntab", Size: 0x593e8, Entropy: 5.44},
+							{Name: ".go.buildinfo", Size: 0x20, Entropy: 3.46},
+							{Name: ".noptrdata", Size: 0x10720, Entropy: 5.60},
+							{Name: ".data", Size: 0x77f0, Entropy: 1.58},
+							{Name: ".bss", Size: 0x2ef48, Entropy: 0},
+							{Name: ".noptrbss", Size: 0x5360, Entropy: 0},
 						},
 						{"plan9", "go"}: {
-							{Name: "text", Size: 0x110848},
-							{Name: "data", Size: 0x17000},
-							{Name: "syms", Size: 0xe9ac},
-							{Name: "spsz", Size: 0x0},
-							{Name: "pcsz", Size: 0x0},
+							{Name: "text", Size: 0x1108a8, Entropy: 5.88},
+							{Name: "data", Size: 0x17000, Entropy: 4.64},
+							{Name: "syms", Size: 0xe9ac, Entropy: 5.09},
+							{Name: "spsz", Size: 0x0, Entropy: 0},
+							{Name: "pcsz", Size: 0x0, Entropy: 0},
 						},
 						{"plan9", "garble"}: {
-							{Name: "text", Size: 0x10fa28},
-							{Name: "data", Size: 0x17000},
-							{Name: "syms", Size: 0x0},
-							{Name: "spsz", Size: 0x0},
-							{Name: "pcsz", Size: 0x0},
+							{Name: "text", Size: 0x10fa88, Entropy: 5.87},
+							{Name: "data", Size: 0x17000, Entropy: 4.64},
+							{Name: "syms", Size: 0x0, Entropy: 0},
+							{Name: "spsz", Size: 0x0, Entropy: 0},
+							{Name: "pcsz", Size: 0x0, Entropy: 0},
 						},
 						{"darwin", "go"}: {
-							{Name: "__text", Size: 0x8bcf6},
-							{Name: "__symbol_stub1", Size: 0x102},
-							{Name: "__rodata", Size: 0x38aed},
-							{Name: "__typelink", Size: 0x550},
-							{Name: "__itablink", Size: 0x78},
-							{Name: "__gosymtab", Size: 0x0},
-							{Name: "__gopclntab", Size: 0x60fc8},
-							{Name: "__go_buildinfo", Size: 0x20},
-							{Name: "__nl_symbol_ptr", Size: 0x158},
-							{Name: "__noptrdata", Size: 0x10780},
-							{Name: "__data", Size: 0x7470},
-							{Name: "__bss", Size: 0x2f068},
-							{Name: "__noptrbss", Size: 0x51c0},
-							{Name: "__zdebug_abbrev", Size: 0x117},
-							{Name: "__zdebug_line", Size: 0x1d592},
-							{Name: "__zdebug_frame", Size: 0x5b69},
-							{Name: "__debug_gdb_scri", Size: 0x2c},
-							{Name: "__zdebug_info", Size: 0x33a0e},
-							{Name: "__zdebug_loc", Size: 0x1a503},
-							{Name: "__zdebug_ranges", Size: 0x837b},
+							{Name: "__text", Size: 0x8be36, Entropy: 6.16},
+							{Name: "__symbol_stub1", Size: 0x102, Entropy: 3.62},
+							{Name: "__rodata", Size: 0x38b2f, Entropy: 4.37},
+							{Name: "__typelink", Size: 0x550, Entropy: 3.64},
+							{Name: "__itablink", Size: 0x78, Entropy: 2.66},
+							{Name: "__gosymtab", Size: 0x0, Entropy: 0},
+							{Name: "__gopclntab", Size: 0x61080, Entropy: 5.46},
+							{Name: "__go_buildinfo", Size: 0x20, Entropy: 3.79},
+							{Name: "__nl_symbol_ptr", Size: 0x158, Entropy: 0},
+							{Name: "__noptrdata", Size: 0x10780, Entropy: 5.59},
+							{Name: "__data", Size: 0x7470, Entropy: 1.74},
+							{Name: "__bss", Size: 0x2f068, Entropy: 6.13},
+							{Name: "__noptrbss", Size: 0x51c0, Entropy: 5.65},
+							{Name: "__zdebug_abbrev", Size: 0x117, Entropy: 7.16},
+							{Name: "__zdebug_line", Size: 0x1d5a4, Entropy: 7.99},
+							{Name: "__zdebug_frame", Size: 0x5b82, Entropy: 7.92},
+							{Name: "__debug_gdb_scri", Size: 0x2c, Entropy: 4.26},
+							{Name: "__zdebug_info", Size: 0x33a62, Entropy: 7.99},
+							{Name: "__zdebug_loc", Size: 0x1a57f, Entropy: 7.98},
+							{Name: "__zdebug_ranges", Size: 0x8371, Entropy: 7.89},
 						},
 						{"darwin", "garble"}: {
-							{Name: "__text", Size: 0x8bc76},
-							{Name: "__symbol_stub1", Size: 0x102},
-							{Name: "__rodata", Size: 0x38a6d},
-							{Name: "__typelink", Size: 0x550},
-							{Name: "__itablink", Size: 0x78},
-							{Name: "__gosymtab", Size: 0x0},
-							{Name: "__gopclntab", Size: 0x60088},
-							{Name: "__go_buildinfo", Size: 0x20},
-							{Name: "__nl_symbol_ptr", Size: 0x158},
-							{Name: "__noptrdata", Size: 0x10780},
-							{Name: "__data", Size: 0x7470},
-							{Name: "__bss", Size: 0x2f088},
-							{Name: "__noptrbss", Size: 0x51c0},
+							{Name: "__text", Size: 0x8bdb6, Entropy: 6.16},
+							{Name: "__symbol_stub1", Size: 0x102, Entropy: 3.46},
+							{Name: "__rodata", Size: 0x38a8e, Entropy: 4.37},
+							{Name: "__typelink", Size: 0x550, Entropy: 3.64},
+							{Name: "__itablink", Size: 0x78, Entropy: 2.67},
+							{Name: "__gosymtab", Size: 0x0, Entropy: 0},
+							{Name: "__gopclntab", Size: 0x60160, Entropy: 5.44},
+							{Name: "__go_buildinfo", Size: 0x20, Entropy: 3.85},
+							{Name: "__nl_symbol_ptr", Size: 0x158, Entropy: 0},
+							{Name: "__noptrdata", Size: 0x10780, Entropy: 5.59},
+							{Name: "__data", Size: 0x7470, Entropy: 1.76},
+							{Name: "__bss", Size: 0x2f088, Entropy: 6.12},
+							{Name: "__noptrbss", Size: 0x51c0, Entropy: 5.56},
 						},
 						{"windows", "go"}: {
-							{Name: ".text", Size: 0x8e400},
-							{Name: ".rdata", Size: 0x9e400},
-							{Name: ".data", Size: 0x17a00},
-							{Name: ".zdebug_abbrev", Size: 0x200},
-							{Name: ".zdebug_line", Size: 0x1cc00},
-							{Name: ".zdebug_frame", Size: 0x5800},
-							{Name: ".debug_gdb_scripts", Size: 0x200},
-							{Name: ".zdebug_info", Size: 0x32a00},
-							{Name: ".zdebug_loc", Size: 0x1ba00},
-							{Name: ".zdebug_ranges", Size: 0x9400},
-							{Name: ".idata", Size: 0x600},
-							{Name: ".reloc", Size: 0x6a00},
-							{Name: ".symtab", Size: 0x17800},
+							{Name: ".text", Size: 0x8e400, Entropy: 6.17},
+							{Name: ".rdata", Size: 0x9e600, Entropy: 5.13},
+							{Name: ".data", Size: 0x17a00, Entropy: 4.60},
+							{Name: ".zdebug_abbrev", Size: 0x200, Entropy: 4.82},
+							{Name: ".zdebug_line", Size: 0x1cc00, Entropy: 7.99},
+							{Name: ".zdebug_frame", Size: 0x5800, Entropy: 7.92},
+							{Name: ".debug_gdb_scripts", Size: 0x200, Entropy: 0.76},
+							{Name: ".zdebug_info", Size: 0x32a00, Entropy: 7.99},
+							{Name: ".zdebug_loc", Size: 0x1ba00, Entropy: 7.98},
+							{Name: ".zdebug_ranges", Size: 0x9600, Entropy: 7.78},
+							{Name: ".idata", Size: 0x600, Entropy: 3.61},
+							{Name: ".reloc", Size: 0x6a00, Entropy: 5.44},
+							{Name: ".symtab", Size: 0x17800, Entropy: 5.13},
 						},
 						{"windows", "garble"}: {
-							{Name: ".text", Size: 0x8e400},
-							{Name: ".rdata", Size: 0x9d600},
-							{Name: ".data", Size: 0x17a00},
-							{Name: ".idata", Size: 0x600},
-							{Name: ".reloc", Size: 0x6a00},
-							{Name: ".symtab", Size: 0x200},
+							{Name: ".text", Size: 0x8e400, Entropy: 6.17},
+							{Name: ".rdata", Size: 0x9d600, Entropy: 5.13},
+							{Name: ".data", Size: 0x17a00, Entropy: 4.60},
+							{Name: ".idata", Size: 0x600, Entropy: 3.55},
+							{Name: ".reloc", Size: 0x6a00, Entropy: 5.44},
+							{Name: ".symtab", Size: 0x200, Entropy: 0.02},
 						},
 					}
 
@@ -470,9 +489,12 @@ func TestToutoumomoma(t *testing.T) {
 
 					buildFor := [2]string{goos, builder}
 
-					if !similarSections(got, want[buildFor]) {
+					if wrong, ok := similarSections(got, want[buildFor], tol); !ok {
 						t.Errorf("unexpected symbols for GOOS=%s %s: got:%v want:%v",
 							goos, cmd, got, want[buildFor])
+						if wrong >= 0 {
+							t.Logf("%d: %+v != %v", wrong, got[wrong], want[buildFor][wrong])
+						}
 					}
 				})
 
@@ -495,19 +517,22 @@ func hasMain(sym []string) bool {
 // similarSections returns whether a and b a similar. For this comparison
 // similarity is defined as have the same set of sections and corresponding
 // sections having the same zero-size status.
-func similarSections(a, b []Section) bool {
+func similarSections(a, b []Section, tol float64) (wrong int, ok bool) {
 	if len(a) != len(b) {
-		return false
+		return -1, false
 	}
 	for i, s := range a {
 		if s.Name != b[i].Name {
-			return false
+			return i, false
 		}
 		if (s.Size == 0) != (b[i].Size == 0) {
-			return false
+			return i, false
+		}
+		if math.Abs(s.Entropy-b[i].Entropy) > tol {
+			return i, false
 		}
 	}
-	return true
+	return 0, true
 }
 
 func build(goos, builder, path, target string, flags []string) (*exec.Cmd, error) {

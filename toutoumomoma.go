@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 )
@@ -34,7 +35,7 @@ type file interface {
 	hasRealFiles() (ok bool, err error)
 	importedSymbols() ([]string, error)
 	goSymbols(stdlib bool) ([]string, error)
-	sectionStats() []Section
+	sectionStats() ([]Section, error)
 	io.Closer
 }
 
@@ -148,7 +149,8 @@ func (f *File) Stripped() (sneaky bool, err error) {
 // https://www.fireeye.com/blog/threat-research/2014/01/tracking-malware-import-hashing.html.
 // For Linux, a similar construction is used with each imported symbol represented
 // as library.symbol without trimming the extension from the library part, while
-// Darwin imports are the list of symbols without a library prefix.
+// Darwin imports are the list of symbols without a library prefix and is equivalent
+// to the Anomali SymHash https://www.anomali.com/blog/symhash.
 //
 // Darwin:
 //  ___error
@@ -227,14 +229,15 @@ func (f *File) GoSymbolHash(stdlib bool) (hash []byte, imports []string, err err
 
 // Sections returns the names and sizes of object file sections in the order
 // that they appear in file.
-func (f *File) Sections() []Section {
+func (f *File) Sections() ([]Section, error) {
 	return f.sectionStats()
 }
 
 // Section holds basic executable section information.
 type Section struct {
-	Name string // Name is the platform-specific name of the section.
-	Size uint64 // Size of the uncompressed size of the section.
+	Name    string  // Name is the platform-specific name of the section.
+	Size    uint64  // Size of the uncompressed size of the section.
+	Entropy float64 // Entropy is the Shannon entropy of the section data in bits.
 }
 
 // Stripped is a convenience wrapper around File.Stripped.
@@ -274,7 +277,7 @@ func Sections(path string) ([]Section, error) {
 		return nil, err
 	}
 	defer f.Close()
-	return f.Sections(), nil
+	return f.Sections()
 }
 
 func isStdlib(s string, addr uint64, tab *gosym.Table) bool {
@@ -290,4 +293,66 @@ func isStdlib(s string, addr uint64, tab *gosym.Table) bool {
 	}
 	dot := strings.IndexByte(s[:slash], '.')
 	return dot < 0
+}
+
+// NameEntropy returns the entropy for the given import symbols names as a set.
+func NameEntropy(symbols []string) float64 {
+	// Tally classes.
+	var (
+		n [256]float64
+		N int
+	)
+	for _, data := range symbols {
+		N += len(data)
+		for _, b := range []byte(data) {
+			n[b]++
+		}
+	}
+
+	return entropy(&n, N)
+}
+
+// streamEntropy returns the entropy for bytes in the provided io.Reader.
+func streamEntropy(r io.Reader) (float64, error) {
+	// Tally classes.
+	var (
+		n   [256]float64
+		N   int
+		buf [4096]byte
+	)
+	for {
+		_n, err := r.Read(buf[:])
+		for _, b := range buf[:_n] {
+			n[b]++
+			N++
+		}
+		if err != nil {
+			if err != io.EOF {
+				return 0, err
+			}
+			break
+		}
+	}
+
+	return entropy(&n, N), nil
+}
+
+// entropy returns the entropy for counts in n for a sequence that is N long.
+func entropy(n *[256]float64, N int) float64 {
+	// e = -∑i=1..k((p_i)*log(p_i))
+	var e float64
+	f := 1 / float64(N)
+	for _, cnt := range n {
+		if cnt == 0 {
+			// Ignore zero counts.
+			continue
+		}
+		p := f * cnt
+		e += p * math.Log2(p)
+	}
+	if e == 0 {
+		// Don't negate zero.
+		return 0
+	}
+	return -e
 }

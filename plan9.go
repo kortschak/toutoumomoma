@@ -130,10 +130,18 @@ func (f *plan9File) pclnTable() (*gosym.Table, error) {
 	return gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
 }
 
-func (f *plan9File) sectionStats() []Section {
+func (f *plan9File) sectionStats() ([]Section, error) {
 	s := make([]Section, len(f.objFile.Sections))
 	for i, sect := range f.objFile.Sections {
-		s[i] = Section{Name: sect.Name, Size: uint64(sect.Size)}
+		e, err := streamEntropy(sect.Open())
+		if err != nil {
+			return nil, err
+		}
+		s[i] = Section{
+			Name:    sect.Name,
+			Size:    uint64(sect.Size),
+			Entropy: e,
+		}
 	}
-	return s
+	return s, nil
 }
