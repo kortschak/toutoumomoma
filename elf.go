@@ -136,10 +136,18 @@ func (f *elfFile) pclnTable() (*gosym.Table, error) {
 	return gosym.NewTable(symtab, gosym.NewLineTable(pclntab, textStart))
 }
 
-func (f *elfFile) sectionStats() []Section {
+func (f *elfFile) sectionStats() ([]Section, error) {
 	s := make([]Section, len(f.objFile.Sections))
 	for i, sect := range f.objFile.Sections {
-		s[i] = Section{Name: sect.Name, Size: sect.Size}
+		e, err := streamEntropy(sect.Open())
+		if err != nil {
+			return nil, err
+		}
+		s[i] = Section{
+			Name:    sect.Name,
+			Size:    sect.Size,
+			Entropy: e,
+		}
 	}
-	return s
+	return s, nil
 }
