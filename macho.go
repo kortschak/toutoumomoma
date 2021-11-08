@@ -117,14 +117,15 @@ func (f *machoFile) pclnTable() (*gosym.Table, error) {
 func (f *machoFile) sectionStats() ([]Section, error) {
 	s := make([]Section, len(f.objFile.Sections))
 	for i, sect := range f.objFile.Sections {
-		e, err := streamEntropy(sect.Open())
+		h, sigma, err := streamEntropy(sect.Open())
 		if err != nil {
 			return nil, err
 		}
 		s[i] = Section{
-			Name:    sect.Name,
-			Size:    sect.Size,
-			Entropy: e,
+			Name:       sect.Name,
+			Size:       sect.Size,
+			Entropy:    h,
+			VarEntropy: sigma,
 		}
 	}
 	return s, nil
