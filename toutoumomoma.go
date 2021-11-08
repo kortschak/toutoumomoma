@@ -235,9 +235,10 @@ func (f *File) Sections() ([]Section, error) {
 
 // Section holds basic executable section information.
 type Section struct {
-	Name    string  // Name is the platform-specific name of the section.
-	Size    uint64  // Size of the uncompressed size of the section.
-	Entropy float64 // Entropy is the Shannon entropy of the section data in bits.
+	Name       string  // Name is the platform-specific name of the section.
+	Size       uint64  // Size of the uncompressed size of the section.
+	Entropy    float64 // Entropy is the Shannon entropy of the section data in bits.
+	VarEntropy float64 // VarEntropy is an estimate of the variance of the section entropy.
 }
 
 // Stripped is a convenience wrapper around File.Stripped.
@@ -295,64 +296,86 @@ func isStdlib(s string, addr uint64, tab *gosym.Table) bool {
 	return dot < 0
 }
 
-// NameEntropy returns the entropy for the given import symbols names as a set.
-func NameEntropy(symbols []string) float64 {
+// NameEntropy returns the entropy and entropy variance for the given import
+// symbols names as a set.
+func NameEntropy(symbols []string) (entropy, variance float64) {
 	// Tally classes.
 	var (
-		n [256]float64
-		N int
+		counts [256]float64
+		n      int
 	)
 	for _, data := range symbols {
-		N += len(data)
+		n += len(data)
 		for _, b := range []byte(data) {
-			n[b]++
+			counts[b]++
 		}
 	}
 
-	return entropy(&n, N)
+	return entropyVariance(&counts, n)
 }
 
-// streamEntropy returns the entropy for bytes in the provided io.Reader.
-func streamEntropy(r io.Reader) (float64, error) {
+// streamEntropy returns the entropy and entropy variance for bytes in the
+// provided io.Reader.
+func streamEntropy(r io.Reader) (entropy, variance float64, err error) {
 	// Tally classes.
 	var (
-		n   [256]float64
-		N   int
-		buf [4096]byte
+		counts [256]float64
+		n      int
+		buf    [4096]byte
 	)
 	for {
 		_n, err := r.Read(buf[:])
+		n += _n
 		for _, b := range buf[:_n] {
-			n[b]++
-			N++
+			counts[b]++
 		}
 		if err != nil {
 			if err != io.EOF {
-				return 0, err
+				return 0, 0, err
 			}
 			break
 		}
 	}
 
-	return entropy(&n, N), nil
+	entropy, variance = entropyVariance(&counts, n)
+	return entropy, variance, nil
 }
 
-// entropy returns the entropy for counts in n for a sequence that is N long.
-func entropy(n *[256]float64, N int) float64 {
-	// e = -∑i=1..k((p_i)*log(p_i))
-	var e float64
-	f := 1 / float64(N)
-	for _, cnt := range n {
+// entropyVariance returns the entropy and entropy variance for counts in
+// counts for a sequence that is n long. See https://arxiv.org/pdf/1807.02603.pdf
+// for details of the variance calculation.
+func entropyVariance(counts *[256]float64, n int) (entropy, variance float64) {
+	if n == 0 {
+		return 0, 0
+	}
+
+	// H = -∑i=1..k((p_i)*log(p_i))
+	// F² = ∑i=1..k((p_i)*log²(p_i)) - H²
+	//
+	// Variance in H is F²/N
+	//
+	// Calculated using the weighted incremental algorithm for
+	// mean and variance estimates.
+	// See https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Weighted_incremental_algorithm
+	var pSum, pSum2 float64
+	for _, cnt := range counts {
 		if cnt == 0 {
 			// Ignore zero counts.
 			continue
 		}
-		p := f * cnt
-		e += p * math.Log2(p)
+		p := cnt / float64(n)
+		l2p := math.Log2(p)
+
+		pSum += p
+		pSum2 += p * p
+		tmp := entropy
+		entropy = tmp + (p/pSum)*(l2p-tmp)
+		variance += p * (l2p - tmp) * (l2p - entropy)
 	}
-	if e == 0 {
+	variance /= float64(n)
+	if entropy == 0 {
 		// Don't negate zero.
-		return 0
+		return 0, variance
 	}
-	return -e
+	return -entropy, variance
 }
