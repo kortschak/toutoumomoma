@@ -42,18 +42,30 @@ type file interface {
 // Open opens the file at at the provided path.
 //
 // If the file at path is not an ELF, Mach-O, plan9obj or PE format
-// executable, ImportHash will return ErrUnknownFormat. Files without
+// executable, Open will return ErrUnknownFormat. Files without
 // execute permissions may be opened.
 func Open(path string) (*File, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-
-	var magic [4]byte
-	_, err = f.ReadAt(magic[:], 0)
+	file, err := NewFile(f)
 	if err != nil {
 		f.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+// NewFile creates a new File for accessing a binary object in an underlying
+// reader. The binary is expected to start at position 0 in the ReaderAt.
+//
+// If the in the reader is not an ELF, Mach-O, plan9obj or PE format
+// executable, NewFile will return ErrUnknownFormat.
+func NewFile(r io.ReaderAt) (*File, error) {
+	var magic [4]byte
+	_, err := r.ReadAt(magic[:], 0)
+	if err != nil {
 		if err == io.EOF {
 			err = ErrUnknownFormat
 		}
@@ -61,7 +73,7 @@ func Open(path string) (*File, error) {
 	}
 	switch {
 	case bytes.Equal(magic[:], []byte("\x7FELF")):
-		exe, err := openELF(f)
+		exe, err := openELF(r)
 		if err != nil {
 			return nil, err
 		}
@@ -69,14 +81,14 @@ func Open(path string) (*File, error) {
 
 	case bytes.Equal(magic[:3], []byte("\xfe\xed\xfa")),
 		bytes.Equal(magic[1:], []byte("\xfa\xed\xfe")):
-		exe, err := openMachO(f)
+		exe, err := openMachO(r)
 		if err != nil {
 			return nil, err
 		}
 		return &File{exe}, nil
 
 	case bytes.Equal(magic[:2], []byte("MZ")):
-		exe, err := openPE(f)
+		exe, err := openPE(r)
 		if err != nil {
 			return nil, err
 		}
@@ -85,14 +97,13 @@ func Open(path string) (*File, error) {
 	case bytes.Equal(magic[:], []byte("\x00\x00\x01\xeb")),
 		bytes.Equal(magic[:], []byte("\x00\x00\x8a\x97")),
 		bytes.Equal(magic[:], []byte("\x00\x00\x06G")):
-		exe, err := openPlan9(f)
+		exe, err := openPlan9(r)
 		if err != nil {
 			return nil, err
 		}
 		return &File{exe}, nil
 
 	default:
-		f.Close()
 		return nil, ErrUnknownFormat
 	}
 }
@@ -114,7 +125,8 @@ func (f *File) Type() string {
 	}
 }
 
-// Close closes the file.
+// Close closes the file. If the File was created using NewFile directly
+// instead of Open, Close has no effect.
 func (f *File) Close() error {
 	return f.file.Close()
 }

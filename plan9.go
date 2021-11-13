@@ -8,25 +8,29 @@ import (
 	"bytes"
 	"debug/gosym"
 	"debug/plan9obj"
-	"os"
+	"io"
 	"strings"
 )
 
 type plan9File struct {
-	f       *os.File
+	r       io.ReaderAt
 	objFile *plan9obj.File
 }
 
-func openPlan9(f *os.File) (*plan9File, error) {
-	objFile, err := plan9obj.NewFile(f)
+func openPlan9(r io.ReaderAt) (*plan9File, error) {
+	objFile, err := plan9obj.NewFile(r)
 	if err != nil {
 		return nil, err
 	}
-	return &plan9File{f: f, objFile: objFile}, nil
+	return &plan9File{r: r, objFile: objFile}, nil
 }
 
 func (f *plan9File) Close() error {
-	return f.f.Close()
+	f.objFile = nil
+	if c, ok := f.r.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 func (f *plan9File) isGoExecutable() (ok bool, err error) {

@@ -7,25 +7,29 @@ package toutoumomoma
 import (
 	"debug/elf"
 	"debug/gosym"
-	"os"
+	"io"
 	"strings"
 )
 
 type elfFile struct {
-	f       *os.File
+	r       io.ReaderAt
 	objFile *elf.File
 }
 
-func openELF(f *os.File) (*elfFile, error) {
-	objFile, err := elf.NewFile(f)
+func openELF(r io.ReaderAt) (*elfFile, error) {
+	objFile, err := elf.NewFile(r)
 	if err != nil {
 		return nil, err
 	}
-	return &elfFile{f: f, objFile: objFile}, nil
+	return &elfFile{r: r, objFile: objFile}, nil
 }
 
 func (f *elfFile) Close() error {
-	return f.f.Close()
+	f.objFile = nil
+	if c, ok := f.r.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 func (f *elfFile) isGoExecutable() (ok bool, err error) {

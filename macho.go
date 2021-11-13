@@ -7,25 +7,29 @@ package toutoumomoma
 import (
 	"debug/gosym"
 	"debug/macho"
-	"os"
+	"io"
 	"strings"
 )
 
 type machoFile struct {
-	f       *os.File
+	r       io.ReaderAt
 	objFile *macho.File
 }
 
-func openMachO(f *os.File) (*machoFile, error) {
-	objFile, err := macho.NewFile(f)
+func openMachO(r io.ReaderAt) (*machoFile, error) {
+	objFile, err := macho.NewFile(r)
 	if err != nil {
 		return nil, err
 	}
-	return &machoFile{f: f, objFile: objFile}, nil
+	return &machoFile{r: r, objFile: objFile}, nil
 }
 
 func (f *machoFile) Close() error {
-	return f.f.Close()
+	f.objFile = nil
+	if c, ok := f.r.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 func (f *machoFile) isGoExecutable() (ok bool, err error) {

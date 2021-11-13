@@ -9,26 +9,30 @@ import (
 	"debug/gosym"
 	"debug/pe"
 	"fmt"
-	"os"
+	"io"
 	"path"
 	"strings"
 )
 
 type peFile struct {
-	f       *os.File
+	r       io.ReaderAt
 	objFile *pe.File
 }
 
-func openPE(f *os.File) (*peFile, error) {
-	objFile, err := pe.NewFile(f)
+func openPE(r io.ReaderAt) (*peFile, error) {
+	objFile, err := pe.NewFile(r)
 	if err != nil {
 		return nil, err
 	}
-	return &peFile{f: f, objFile: objFile}, nil
+	return &peFile{r: r, objFile: objFile}, nil
 }
 
 func (f *peFile) Close() error {
-	return f.f.Close()
+	f.objFile = nil
+	if c, ok := f.r.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 func (f *peFile) isGoExecutable() (ok bool, err error) {
