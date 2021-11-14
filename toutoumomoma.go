@@ -125,8 +125,9 @@ func (f *File) Type() string {
 	}
 }
 
-// Close closes the file. If the File was created using NewFile directly
-// instead of Open, Close has no effect.
+// Close closes the file. Close must be called if the File was created using
+// Open. If NewFile was used to create the File, Close will close the underlying
+// io.ReaderAt if it implements the io.Closer interface.
 func (f *File) Close() error {
 	return f.file.Close()
 }
