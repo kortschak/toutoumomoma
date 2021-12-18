@@ -117,7 +117,7 @@ func TestToutoumomoma(t *testing.T) {
 					}
 				})
 
-				test := test{goos: goos, builder: builder, flags: strings.Join(flags, "")}
+				test := test{goos: goos, builder: builder, flags: strings.Join(flags, " ")}
 
 				t.Run(fmt.Sprintf("ImportHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
 					if !*generate && len(goldenValues[buildVersion]) == 0 {
@@ -242,6 +242,7 @@ func TestToutoumomoma(t *testing.T) {
 
 	if *generate {
 		utter.Config.ElideType = true
+		utter.Config.SortKeys = true
 		var buf bytes.Buffer
 
 		fmt.Fprintf(&buf, `// Code generate by go test -generate github.com/kortschak/toutoumomoma. DO NOT EDIT.
