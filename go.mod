@@ -2,7 +2,10 @@ module github.com/kortschak/toutoumomoma
 
 go 1.17
 
-require mvdan.cc/garble v0.4.0
+require (
+	github.com/kortschak/utter v1.2.0
+	mvdan.cc/garble v0.4.0
+)
 
 require (
 	golang.org/x/mod v0.5.0 // indirect
