@@ -146,7 +146,7 @@ func TestToutoumomoma(t *testing.T) {
 
 				t.Run(fmt.Sprintf("GoSymbolHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
 					const (
-						tolEnt = 0.1
+						tolEnt = 0.3
 						tolVar = 0.01
 					)
 
@@ -169,16 +169,6 @@ func TestToutoumomoma(t *testing.T) {
 						goldenValues[buildVersion][test] = golden
 					}
 
-					buildFor := [3]string{goos, builder, strings.Join(flags, " ")}
-					switch {
-					case builder == "go":
-						buildFor[0] = "*"
-						buildFor[2] = "*"
-					case goos != "darwin":
-						buildFor[0] = "!darwin"
-						buildFor[2] = "*"
-					}
-
 					if (goos != "darwin" || builder != "garble") && fmt.Sprintf("%x", got) != golden.hash {
 						t.Errorf("unexpected hash for executable for GOOS=%s %s: got:%x want:%s",
 							goos, cmd, got, golden.hash)
@@ -193,7 +183,7 @@ func TestToutoumomoma(t *testing.T) {
 						t.Errorf("unexpected symbol name entropy for GOOS=%s %s: got:%v want:%v",
 							goos, cmd, gotEntropy, golden.entropy)
 					}
-					if math.Abs(gotVariance-golden.variance) > tolEnt {
+					if math.Abs(gotVariance-golden.variance) > tolVar {
 						t.Errorf("unexpected symbol name entropy for GOOS=%s %s: got:%v want:%v",
 							goos, cmd, gotVariance, golden.variance)
 					}
