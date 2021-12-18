@@ -120,6 +120,10 @@ func TestToutoumomoma(t *testing.T) {
 				test := test{goos: goos, builder: builder, flags: strings.Join(flags, "")}
 
 				t.Run(fmt.Sprintf("ImportHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
+					if !*generate && len(goldenValues[buildVersion]) == 0 {
+						t.Skipf("no golden values for %s", buildVersion)
+					}
+
 					test.name = "ImportHash"
 					golden, _ := goldenValues[buildVersion][test].(importHashTestResults)
 
@@ -145,6 +149,10 @@ func TestToutoumomoma(t *testing.T) {
 				})
 
 				t.Run(fmt.Sprintf("GoSymbolHash_%s_%s_%v", goos, builder, strings.Join(flags, "_")), func(t *testing.T) {
+					if !*generate && len(goldenValues[buildVersion]) == 0 {
+						t.Skipf("no golden values for %s", buildVersion)
+					}
+
 					const (
 						tolEnt = 0.3
 						tolVar = 0.01
@@ -194,6 +202,10 @@ func TestToutoumomoma(t *testing.T) {
 					continue
 				}
 				t.Run(fmt.Sprintf("SectionStats_%s_%s", goos, builder), func(t *testing.T) {
+					if !*generate && len(goldenValues[buildVersion]) == 0 {
+						t.Skipf("no golden values for %s", buildVersion)
+					}
+
 					const tol = 0.5
 
 					// Included purely for regression testing. ELF values confirmed
