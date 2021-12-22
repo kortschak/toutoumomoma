@@ -252,6 +252,7 @@ type Section struct {
 	Size       uint64  // Size of the uncompressed size of the section.
 	Entropy    float64 // Entropy is the Shannon entropy of the section data in bits.
 	VarEntropy float64 // VarEntropy is an estimate of the variance of the section entropy.
+	Flags      uint32  // Flags holds platform-specific section flags.
 }
 
 // Stripped is a convenience wrapper around File.Stripped.

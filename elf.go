@@ -152,6 +152,7 @@ func (f *elfFile) sectionStats() ([]Section, error) {
 			Size:       sect.Size,
 			Entropy:    h,
 			VarEntropy: sigma,
+			Flags:      uint32(sect.Flags),
 		}
 	}
 	return s, nil

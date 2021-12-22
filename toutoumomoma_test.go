@@ -298,6 +298,9 @@ func similarSections(a, b []Section, tol float64) (wrong int, ok bool) {
 		if math.Abs(s.VarEntropy-b[i].VarEntropy) > tol/100 {
 			return i, false
 		}
+		if s.Flags != b[i].Flags {
+			return i, false
+		}
 	}
 	return 0, true
 }
