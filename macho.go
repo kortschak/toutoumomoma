@@ -130,6 +130,7 @@ func (f *machoFile) sectionStats() ([]Section, error) {
 			Size:       sect.Size,
 			Entropy:    h,
 			VarEntropy: sigma,
+			Flags:      sect.Flags,
 		}
 	}
 	return s, nil
