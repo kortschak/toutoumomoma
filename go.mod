@@ -3,7 +3,7 @@ module github.com/kortschak/toutoumomoma
 go 1.17
 
 require (
-	github.com/kortschak/utter v1.2.1
+	github.com/kortschak/utter v1.4.1
 	mvdan.cc/garble v0.4.0
 )
 

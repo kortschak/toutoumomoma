@@ -243,6 +243,7 @@ func TestToutoumomoma(t *testing.T) {
 	if *generate {
 		utter.Config.ElideType = true
 		utter.Config.SortKeys = true
+		utter.Config.LocalPackage = "toutoumomoma"
 		var buf bytes.Buffer
 
 		fmt.Fprintf(&buf, `// Code generate by go test -generate github.com/kortschak/toutoumomoma. DO NOT EDIT.
@@ -256,7 +257,7 @@ package toutoumomoma
 // goldenValues is the list of known golden values keyed on Go and Garble version
 // at the first level and test name in the second level.
 var goldenValues = `)
-		fmt.Fprint(&buf, strings.ReplaceAll(utter.Sdump(goldenValues), "toutoumomoma.", ""))
+		utter.Fdump(&buf, goldenValues)
 		b, err := format.Source(buf.Bytes())
 		if err != nil {
 			t.Fatalf("unexpected error formatting golden value source: %v", err)
