@@ -192,7 +192,7 @@ func TestToutoumomoma(t *testing.T) {
 							goos, cmd, gotEntropy, golden.entropy)
 					}
 					if math.Abs(gotVariance-golden.variance) > tolVar {
-						t.Errorf("unexpected symbol name entropy for GOOS=%s %s: got:%v want:%v",
+						t.Errorf("unexpected symbol name entropy variance for GOOS=%s %s: got:%v want:%v",
 							goos, cmd, gotVariance, golden.variance)
 					}
 				})
